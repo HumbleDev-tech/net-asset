@@ -1,5 +1,5 @@
-// NetAsset - ITAM & HelpDesk Schema
-// Sistema de Gestión de Activos TI y Mesa de Ayuda
+// NetAsset - ITAM & HelpDesk Schema (Multi-Tenant)
+// Docs: /docs/ARCHITECTURE.md
 
 generator client {
   provider = "prisma-client"
@@ -10,111 +10,249 @@ datasource db {
   provider = "postgresql"
 }
 
-// ─── Ubicaciones (Departamentos / Áreas) ─────────────────────────
-model Ubicacion {
-  id        Int       @id @default(autoincrement())
-  nombre    String    @unique // Ej: "Maternidad", "Finanzas", "HODOM"
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  usuarios  Usuario[]
-  equipos   Equipo[]
+// ══════════════════════════════════════════════════════════
+// CAPA GLOBAL — Auth & Multi-Tenant
+// ══════════════════════════════════════════════════════════
+
+// Organización = El tenant. Todo dato de negocio pertenece a una org.
+model Organization {
+  id        String   @id @default(cuid())
+  name      String                         // "Hospital Regional", "Escuela Nº5"
+  slug      String   @unique               // "hospital-regional" (para URLs)
+  type      OrgType  @default(EMPRESA)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships Membership[]
+  ubicaciones Ubicacion[]
+  empleados   Empleado[]
+  equipos     Equipo[]
+  insumos     Insumo[]
+  tickets     Ticket[]
 }
 
-// ─── Usuarios (Personal del hospital) ────────────────────────────
-model Usuario {
-  id          Int       @id @default(autoincrement())
-  rut         String    @unique
+// User = Persona con cuenta en la plataforma (puede loguearse)
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts    Account[]
+  sessions    Session[]
+  memberships Membership[]
+}
+
+// Membership = Vínculo User ↔ Organization con rol
+model Membership {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  role      Role     @default(TECNICO)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, orgId])
+}
+
+// NextAuth — Cuentas OAuth (GitHub, Google)
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  @@unique([provider, providerAccountId])
+}
+
+// NextAuth — Sesiones
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+  activeOrgId  String?  // Org activa en esta sesión
+}
+
+// ══════════════════════════════════════════════════════════
+// CAPA POR ORGANIZACIÓN — Datos de Negocio
+// REGLA: Toda tabla DEBE tener orgId
+// ══════════════════════════════════════════════════════════
+
+// ─── Ubicaciones (Departamentos / Áreas) ─────────────────────────
+model Ubicacion {
+  id        Int          @id @default(autoincrement())
+  nombre    String
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  empleados Empleado[]
+  equipos   Equipo[]
+
+  @@unique([orgId, nombre])
+}
+
+// ─── Empleados (Personal de la organización) ─────────────────────
+model Empleado {
+  id          Int          @id @default(autoincrement())
+  rut         String?
   nombre      String
   correo      String?
+  telefono    String?
   cargo       String?
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   ubicacionId Int
-  ubicacion   Ubicacion @relation(fields: [ubicacionId], references: [id])
-  equipos     Equipo[]
-  tickets     Ticket[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  ubicacion   Ubicacion    @relation(fields: [ubicacionId], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  equipos Equipo[]
+  tickets Ticket[]
+
+  @@unique([orgId, rut])
 }
 
 // ─── Equipos (PCs, Impresoras, etc.) ─────────────────────────────
 model Equipo {
-  id          Int       @id @default(autoincrement())
+  id          Int          @id @default(autoincrement())
   tipo        TipoEquipo
-  marca       String?   // Ej: "HP", "Lenovo", "Brother"
-  modelo      String?   // Ej: "ProDesk 400 G7", "MFC-L2710DW"
-  numeroSerie String?   @unique
-  ip          String?   // Ej: "10.4.46.101"
+  marca       String?
+  modelo      String?
+  numeroSerie String?
+  ip          String?
   hostname    String?
+  macAddress  String?
+  so          String?      // Sistema operativo
+  ram         String?      // "8 GB"
+  disco       String?      // "256 GB SSD"
+  procesador  String?      // "Intel i5-10400"
   estado      EstadoEquipo @default(ACTIVO)
+  fechaCompra DateTime?
+  garantia    DateTime?    // Fecha fin garantía
   notas       String?
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   ubicacionId Int
-  ubicacion   Ubicacion @relation(fields: [ubicacionId], references: [id])
-  usuarioId   Int?      // Las impresoras pueden no tener usuario
-  usuario     Usuario?  @relation(fields: [usuarioId], references: [id])
-  insumos     EquipoInsumo[]
-  tickets     Ticket[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  ubicacion   Ubicacion    @relation(fields: [ubicacionId], references: [id])
+  empleadoId  Int?
+  empleado    Empleado?    @relation(fields: [empleadoId], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  insumos EquipoInsumo[]
+  tickets Ticket[]
+
+  @@unique([orgId, numeroSerie])
 }
 
 // ─── Insumos (Tóners, Tintas, etc.) ─────────────────────────────
 model Insumo {
-  id          Int       @id @default(autoincrement())
-  modelo      String    @unique // Ej: "TN-1060", "W9004MC"
+  id          Int          @id @default(autoincrement())
+  modelo      String
   tipo        TipoInsumo
-  marca       String?   // Ej: "HP", "Brother"
-  stockActual Int       @default(0)
-  stockMinimo Int       @default(2) // Alerta cuando llega a este nivel
+  marca       String?
+  stockActual Int          @default(0)
+  stockMinimo Int          @default(2)
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
   equipos     EquipoInsumo[]
   movimientos MovimientoInsumo[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+
+  @@unique([orgId, modelo])
 }
 
-// ─── Relación Equipo-Insumo (qué insumo usa cada impresora) ─────
+// ─── Relación Equipo-Insumo ─────────────────────────────────────
 model EquipoInsumo {
-  id        Int     @id @default(autoincrement())
-  equipoId  Int
-  equipo    Equipo  @relation(fields: [equipoId], references: [id])
-  insumoId  Int
-  insumo    Insumo  @relation(fields: [insumoId], references: [id])
+  id       Int    @id @default(autoincrement())
+  equipoId Int
+  equipo   Equipo @relation(fields: [equipoId], references: [id], onDelete: Cascade)
+  insumoId Int
+  insumo   Insumo @relation(fields: [insumoId], references: [id], onDelete: Cascade)
 
   @@unique([equipoId, insumoId])
 }
 
-// ─── Movimientos de Insumos (Historial) ──────────────────────────
+// ─── Movimientos de Insumos (Historial) ─────────────────────────
 model MovimientoInsumo {
-  id        Int              @id @default(autoincrement())
+  id        Int            @id @default(autoincrement())
   insumoId  Int
-  insumo    Insumo           @relation(fields: [insumoId], references: [id])
+  insumo    Insumo         @relation(fields: [insumoId], references: [id], onDelete: Cascade)
   tipo      TipoMovimiento
   cantidad  Int
   nota      String?
-  createdAt DateTime         @default(now())
+  createdAt DateTime       @default(now())
 }
 
 // ─── Tickets de Soporte (HelpDesk) ──────────────────────────────
 model Ticket {
-  id          Int           @id @default(autoincrement())
+  id          Int          @id @default(autoincrement())
   titulo      String
   descripcion String?
-  prioridad   Prioridad     @default(MEDIA)
-  estado      EstadoTicket  @default(ABIERTO)
-  usuarioId   Int
-  usuario     Usuario       @relation(fields: [usuarioId], references: [id])
+  prioridad   Prioridad    @default(MEDIA)
+  estado      EstadoTicket @default(ABIERTO)
+  empleadoId  Int
+  empleado    Empleado     @relation(fields: [empleadoId], references: [id])
   equipoId    Int?
-  equipo      Equipo?       @relation(fields: [equipoId], references: [id])
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  equipo      Equipo?      @relation(fields: [equipoId], references: [id])
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
   closedAt    DateTime?
 }
 
-// ─── Enums ───────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+// ENUMS
+// ══════════════════════════════════════════════════════════
+
+enum OrgType {
+  HOSPITAL
+  CLINICA
+  ESCUELA
+  UNIVERSIDAD
+  EMPRESA
+  GOBIERNO
+  ONG
+  OTRO
+}
+
+enum Role {
+  SUPER_ADMIN
+  ORG_ADMIN
+  TECNICO
+  USUARIO
+}
+
 enum TipoEquipo {
   PC
   NOTEBOOK
   IMPRESORA
   MONITOR
   TELEFONO
+  SERVIDOR
+  SWITCH
+  ROUTER
+  TABLET
   OTRO
 }
 
@@ -123,19 +261,21 @@ enum EstadoEquipo {
   EN_REPARACION
   DADO_DE_BAJA
   EN_BODEGA
+  PRESTADO
 }
 
 enum TipoInsumo {
   TONER
   TINTA
   DRUM
+  CABLE
   OTRO
 }
 
 enum TipoMovimiento {
-  ENTRADA    // Compra / Recepción
-  SALIDA     // Instalación en equipo
-  AJUSTE     // Corrección de inventario
+  ENTRADA
+  SALIDA
+  AJUSTE
 }
 
 enum EstadoTicket {

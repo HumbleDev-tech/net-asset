@@ -8,58 +8,32 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getStats, mockEquipos, mockInsumos, mockTickets } from "@/lib/mock-data";
-import { EstadoEquipo, TipoEquipo, EstadoTicket, Prioridad } from "@/generated/prisma/enums";
+import { getDashboardStats, getRecentEquipos, getRecentTickets } from "@/lib/actions/stats";
+import { getInsumos } from "@/lib/actions/insumos";
+import {
+  estadoEquipoColor,
+  tipoEquipoIcon,
+  prioridadColor,
+  estadoTicketLabel,
+} from "@/lib/helpers";
 
-// ─── Helpers ────────────────────────────────────────────────────
-function estadoColor(estado: EstadoEquipo) {
-  switch (estado) {
-    case EstadoEquipo.ACTIVO: return "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
-    case EstadoEquipo.EN_REPARACION: return "bg-amber-500/15 text-amber-400 border-amber-500/30";
-    case EstadoEquipo.DADO_DE_BAJA: return "bg-red-500/15 text-red-400 border-red-500/30";
-    case EstadoEquipo.EN_BODEGA: return "bg-slate-500/15 text-slate-400 border-slate-500/30";
-  }
-}
+// ─── Page (Server Component — fetches real data) ────────────────
+export default async function DashboardPage() {
+  const [stats, recentEquipos, insumos, recentTickets] = await Promise.all([
+    getDashboardStats(),
+    getRecentEquipos(6),
+    getInsumos(),
+    getRecentTickets(4),
+  ]);
 
-function tipoIcon(tipo: TipoEquipo) {
-  switch (tipo) {
-    case TipoEquipo.PC: return "🖥️";
-    case TipoEquipo.NOTEBOOK: return "💻";
-    case TipoEquipo.IMPRESORA: return "🖨️";
-    case TipoEquipo.MONITOR: return "🖵";
-    case TipoEquipo.TELEFONO: return "📞";
-    default: return "📦";
-  }
-}
-
-function prioridadColor(p: Prioridad) {
-  switch (p) {
-    case Prioridad.CRITICA: return "bg-red-500/15 text-red-400 border-red-500/30";
-    case Prioridad.ALTA: return "bg-orange-500/15 text-orange-400 border-orange-500/30";
-    case Prioridad.MEDIA: return "bg-amber-500/15 text-amber-400 border-amber-500/30";
-    case Prioridad.BAJA: return "bg-slate-500/15 text-slate-400 border-slate-500/30";
-  }
-}
-
-function estadoTicketLabel(e: EstadoTicket) {
-  switch (e) {
-    case EstadoTicket.ABIERTO: return "Abierto";
-    case EstadoTicket.EN_PROGRESO: return "En progreso";
-    case EstadoTicket.RESUELTO: return "Resuelto";
-    case EstadoTicket.CERRADO: return "Cerrado";
-  }
-}
-
-// ─── Page ───────────────────────────────────────────────────────
-export default function DashboardPage() {
-  const stats = getStats();
+  const alertInsumos = insumos.filter((i) => i.stockActual <= i.stockMinimo);
 
   const statCards = [
     { label: "Equipos Activos", value: stats.equiposActivos, total: stats.totalEquipos, icon: "🖥️", color: "from-cyan-500/20 to-blue-600/20", iconBg: "bg-cyan-500/15 text-cyan-400" },
     { label: "Impresoras", value: stats.totalImpresoras, icon: "🖨️", color: "from-violet-500/20 to-purple-600/20", iconBg: "bg-violet-500/15 text-violet-400" },
     { label: "Insumos en Alerta", value: stats.insumosAlerta, alert: stats.insumosCriticos > 0, icon: "📦", color: stats.insumosCriticos > 0 ? "from-red-500/20 to-orange-600/20" : "from-emerald-500/20 to-green-600/20", iconBg: stats.insumosCriticos > 0 ? "bg-red-500/15 text-red-400" : "bg-emerald-500/15 text-emerald-400" },
     { label: "Tickets Abiertos", value: stats.ticketsAbiertos, alert: stats.ticketsCriticos > 0, icon: "🎫", color: stats.ticketsCriticos > 0 ? "from-amber-500/20 to-yellow-600/20" : "from-sky-500/20 to-blue-600/20", iconBg: stats.ticketsCriticos > 0 ? "bg-amber-500/15 text-amber-400" : "bg-sky-500/15 text-sky-400" },
-    { label: "Usuarios", value: stats.totalUsuarios, icon: "👥", color: "from-indigo-500/20 to-blue-600/20", iconBg: "bg-indigo-500/15 text-indigo-400" },
+    { label: "Empleados", value: stats.totalEmpleados, icon: "👥", color: "from-indigo-500/20 to-blue-600/20", iconBg: "bg-indigo-500/15 text-indigo-400" },
     { label: "En Reparación", value: stats.equiposEnReparacion, alert: stats.equiposEnReparacion > 0, icon: "🔧", color: "from-amber-500/20 to-orange-600/20", iconBg: "bg-amber-500/15 text-amber-400" },
   ];
 
@@ -126,16 +100,16 @@ export default function DashboardPage() {
                   <TableHead className="text-xs">Equipo</TableHead>
                   <TableHead className="text-xs">IP</TableHead>
                   <TableHead className="text-xs">Ubicación</TableHead>
-                  <TableHead className="text-xs">Usuario</TableHead>
+                  <TableHead className="text-xs">Empleado</TableHead>
                   <TableHead className="text-xs">Estado</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockEquipos.slice(0, 6).map((equipo) => (
+                {recentEquipos.map((equipo) => (
                   <TableRow key={equipo.id} className="border-border/30 hover:bg-muted/30">
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <span className="text-base">{tipoIcon(equipo.tipo)}</span>
+                        <span className="text-base">{tipoEquipoIcon(equipo.tipo)}</span>
                         <div>
                           <p className="text-sm font-medium">{equipo.hostname || equipo.modelo}</p>
                           <p className="text-xs text-muted-foreground">{equipo.marca} {equipo.modelo}</p>
@@ -149,11 +123,11 @@ export default function DashboardPage() {
                     </TableCell>
                     <TableCell className="text-sm">{equipo.ubicacion.nombre}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {equipo.usuario?.nombre || "—"}
+                      {equipo.empleado?.nombre || "—"}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={`text-[10px] ${estadoColor(equipo.estado)}`}>
-                        {equipo.estado.replace("_", " ")}
+                      <Badge variant="outline" className={`text-[10px] ${estadoEquipoColor(equipo.estado)}`}>
+                        {equipo.estado.replace(/_/g, " ")}
                       </Badge>
                     </TableCell>
                   </TableRow>
@@ -173,9 +147,12 @@ export default function DashboardPage() {
                 <h3 className="text-sm font-semibold">Insumos Críticos</h3>
               </div>
               <div className="space-y-2">
-                {mockInsumos
-                  .filter((i) => i.stockActual <= i.stockMinimo)
-                  .map((insumo) => (
+                {alertInsumos.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-4 text-center">
+                    ✅ Todo el stock está OK
+                  </p>
+                ) : (
+                  alertInsumos.map((insumo) => (
                     <div
                       key={insumo.id}
                       className={`flex items-center justify-between p-2.5 rounded-lg ${
@@ -201,7 +178,8 @@ export default function DashboardPage() {
                         </p>
                       </div>
                     </div>
-                  ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
@@ -211,7 +189,7 @@ export default function DashboardPage() {
             <CardContent className="p-4">
               <h3 className="text-sm font-semibold mb-3">Tickets Recientes</h3>
               <div className="space-y-2">
-                {mockTickets.slice(0, 4).map((ticket) => (
+                {recentTickets.map((ticket) => (
                   <div
                     key={ticket.id}
                     className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-muted/30 transition-colors"
@@ -222,7 +200,7 @@ export default function DashboardPage() {
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{ticket.titulo}</p>
                       <p className="text-xs text-muted-foreground">
-                        {ticket.usuario.nombre} · {estadoTicketLabel(ticket.estado)}
+                        {ticket.empleado.nombre} · {estadoTicketLabel(ticket.estado)}
                       </p>
                     </div>
                   </div>
