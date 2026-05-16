@@ -161,6 +161,9 @@ async function main() {
   console.log(`✅ Insumos: ${insumosData.length}`);
 
   // ─── 7. Tickets ─────────────────────────────────────────────
+  // Delete existing tickets for this org before recreating (no unique field for upsert)
+  await prisma.ticket.deleteMany({ where: { orgId: org.id } });
+
   const ticketsData = [
     { titulo: "PC no enciende", descripcion: "El equipo no responde al botón de encendido", prioridad: Prioridad.ALTA, estado: EstadoTicket.ABIERTO, empleado: "Ana Martínez", equipo: "PC-URG-01" },
     { titulo: "Impresora atascada", descripcion: "La impresora Brother tiene papel atascado frecuentemente", prioridad: Prioridad.MEDIA, estado: EstadoTicket.EN_PROGRESO, empleado: "Juan Pérez", equipo: "IMP-FIN-01" },
@@ -183,7 +186,6 @@ async function main() {
     });
   }
   console.log(`✅ Tickets: ${ticketsData.length}`);
-
   console.log("\n🎉 Seed completed successfully!");
 }
 

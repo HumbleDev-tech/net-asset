@@ -37,6 +37,28 @@ export async function createTicket(data: {
   return ticket;
 }
 
+// ─── Update general ─────────────────────────────────────────────
+
+export async function updateTicket(
+  id: number,
+  data: {
+    titulo?: string;
+    descripcion?: string;
+    prioridad?: Prioridad;
+    empleadoId?: number;
+    equipoId?: number | null;
+  }
+) {
+  const orgId = await getDemoOrgId();
+  const existing = await prisma.ticket.findFirst({ where: { id, orgId } });
+  if (!existing) throw new Error("Ticket no encontrado");
+
+  const ticket = await prisma.ticket.update({ where: { id }, data });
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/tickets");
+  return ticket;
+}
+
 // ─── Update estado ──────────────────────────────────────────────
 
 export async function updateTicketEstado(id: number, estado: EstadoTicket) {

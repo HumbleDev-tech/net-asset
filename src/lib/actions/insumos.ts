@@ -33,6 +33,27 @@ export async function createInsumo(data: {
   return insumo;
 }
 
+// ─── Update ───────────────────────────────────────────────────────
+
+export async function updateInsumo(
+  id: number,
+  data: {
+    modelo?: string;
+    tipo?: TipoInsumo;
+    marca?: string;
+    stockMinimo?: number;
+  }
+) {
+  const orgId = await getDemoOrgId();
+  const existing = await prisma.insumo.findFirst({ where: { id, orgId } });
+  if (!existing) throw new Error("Insumo no encontrado");
+
+  const insumo = await prisma.insumo.update({ where: { id }, data });
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/insumos");
+  return insumo;
+}
+
 // ─── Stock movement (instalar / recibir) ────────────────────────
 
 export async function registrarMovimiento(data: {
