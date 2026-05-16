@@ -1,9 +1,13 @@
 // ─── Seed script: populates the DB with demo data ──────────────
 // Run with: npx prisma db seed
 import "dotenv/config";
+import { Pool } from "pg";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 
-const prisma = new PrismaClient();
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter } as any);
 
 // Enums - hardcoded to avoid ESM import issues with generated client
 const OrgType = { HOSPITAL: "HOSPITAL" } as const;
@@ -125,10 +129,10 @@ async function main() {
         numeroSerie: eq.numeroSerie,
         ip: eq.ip ?? null,
         hostname: eq.hostname ?? null,
-        so: eq.so ?? null,
-        ram: eq.ram ?? null,
-        disco: eq.disco ?? null,
-        procesador: eq.procesador ?? null,
+        so: (eq as any).so ?? null,
+        ram: (eq as any).ram ?? null,
+        disco: (eq as any).disco ?? null,
+        procesador: (eq as any).procesador ?? null,
         estado: eq.estado,
         ubicacionId: ubicaciones[eq.ubicacion].id,
         empleadoId: eq.empleado ? empleados[eq.empleado].id : null,
@@ -192,9 +196,11 @@ async function main() {
 main()
   .then(async () => {
     await prisma.$disconnect();
+    await pool.end();
   })
   .catch(async (e) => {
     console.error("❌ Seed failed:", e);
     await prisma.$disconnect();
+    await pool.end();
     process.exit(1);
   });
