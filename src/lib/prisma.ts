@@ -2,16 +2,24 @@ import { PrismaClient } from "@/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
+// Cache both pool and client in globalThis to prevent memory leaks
+// during hot-reload in development (each reload would create a new Pool).
+const g = globalThis as unknown as {
+  __pool: Pool | undefined;
+  __prisma: PrismaClient | undefined;
 };
 
-function createPrismaClient() {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  const adapter = new PrismaPg(pool);
-  return new PrismaClient({ adapter } as any);
+if (!g.__pool) {
+  g.__pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: 2,           // Limit connections — we don't need 10 for dev
+    idleTimeoutMillis: 30000,
+  });
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+if (!g.__prisma) {
+  const adapter = new PrismaPg(g.__pool);
+  g.__prisma = new PrismaClient({ adapter } as any);
+}
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+export const prisma = g.__prisma;
