@@ -523,6 +523,10 @@ async function deleteEquipo(id: number) {
 - **Enums:** UPPER_SNAKE_CASE (`ACTIVO`, `EN_REPARACION`)
 - **Actions:** camelCase verbo (`getEquipos`, `createTicket`, `updateEmpleado`)
 
+### R5: Precauciones de Entorno de Desarrollo (Evitar Leaks de RAM)
+- **Bundler:** Debido al gran tamaño de los tipos generados por Prisma, Turbopack puede consumir +30GB de RAM. Usar SIEMPRE `next dev --webpack` en desarrollo.
+- **Pool de DB:** El `Pool` de PostgreSQL y el `PrismaClient` DEBEN estar cacheados en `globalThis` en `src/lib/prisma.ts` para evitar que el hot-reload sature las conexiones a la base de datos.
+
 ---
 
 ## 7. Cambios respecto al schema original
